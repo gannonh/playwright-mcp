@@ -15,7 +15,6 @@
  */
 
 import fs from 'node:fs';
-import url from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -442,11 +441,22 @@ async function launchPersistentContext(browserConfig: FullConfig['browser']): Pr
     const browserName = browserConfig.browserName ?? 'chromium';
     const userDataDir = browserConfig.userDataDir ?? await createUserDataDir({ ...browserConfig, browserName });
     const browserType = playwright[browserName];
+    
+    // Add validation to ensure we have valid parameters
+    if (!userDataDir) {
+      throw new Error('Failed to create or resolve user data directory');
+    }
+    if (!browserType) {
+      throw new Error(`Browser type "${browserName}" is not available`);
+    }
+    
     const browserContext = await browserType.launchPersistentContext(userDataDir, { ...browserConfig.launchOptions, ...browserConfig.contextOptions });
     return { browserContext };
   } catch (error: any) {
     if (error.message.includes('Executable doesn\'t exist'))
       throw new Error(`Browser specified in your config is not installed. Either install it (likely) or change the config.`);
+    if (error.message.includes('Invalid URL: undefined'))
+      throw new Error('Browser WebSocket connection failed - this may be due to browser process startup issues or conflicts');
     throw error;
   }
 }
@@ -461,10 +471,12 @@ async function createUserDataDir(browserConfig: FullConfig['browser']) {
     cacheDirectory = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
   else
     throw new Error('Unsupported platform: ' + process.platform);
-  const result = path.join(cacheDirectory, 'ms-playwright', `mcp-${browserConfig.launchOptions?.channel ?? browserConfig?.browserName}-profile`);
+  
+  // Add process ID and timestamp to ensure uniqueness across multiple MCP instances
+  const uniqueId = `${process.pid}-${Date.now()}`;
+  const result = path.join(cacheDirectory, 'ms-playwright', `mcp-${browserConfig.launchOptions?.channel ?? browserConfig?.browserName}-profile-${uniqueId}`);
   await fs.promises.mkdir(result, { recursive: true });
   return result;
 }
 
-const __filename = url.fileURLToPath(import.meta.url);
-export const packageJSON = JSON.parse(fs.readFileSync(path.join(path.dirname(__filename), '..', 'package.json'), 'utf8'));
+

@@ -125,3 +125,4 @@ export class Tab {
     this._snapshot = await PageSnapshot.create(this.page);
   }
 }
+
